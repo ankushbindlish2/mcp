@@ -47,7 +47,7 @@ extends:
       jobs:
       - job: CheckTokens
         displayName: "Check Token Validity Over Time"
-        timeoutInMinutes: 120
+        timeoutInMinutes: 240
         steps:
         - task: UseDotNet@2
           displayName: "Use .NET SDK from global.json"
@@ -57,7 +57,7 @@ extends:
 
         - task: AzurePowershell@5
           displayName: "Long running token test"
-          timeoutInMinutes: 120
+          timeoutInMinutes: 240
           env:
             SYSTEM_ACCESSTOKEN: $(System.AccessToken)
           inputs:
@@ -71,7 +71,7 @@ extends:
               while ($true) {
                 try {
                   Write-Host "Acquiring new tokens..."
-                  $env:VAULT_TOKEN = Get-AzAccessToken -ResourceUrl "https://vault.azure.net" | Select-Object -ExpandProperty Token
+                  $env:VAULT_TOKEN = Get-AzAccessToken -ResourceUrl "https://vault.azure.net" | Select-Object -ExpandProperty Token | ConvertFrom-SecureString -AsPlainText
 
                   Write-Host "Checking pipeline token..."
                   dotnet run --project ./src/TokenDump.csproj -- env:SYSTEM_ACCESSTOKEN
