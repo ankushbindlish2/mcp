@@ -1,5 +1,6 @@
 ﻿using Azure.Identity;
 using System.IdentityModel.Tokens.Jwt;
+using System.Text.Json;
 
 if(args.Length != 1)
 {
@@ -28,6 +29,8 @@ else
 
 var handler = new JwtSecurityTokenHandler();
 JwtSecurityToken jwtToken = handler.ReadJwtToken(token);
+
+//Console.WriteLine(JsonSerializer.Serialize(jwtToken.Payload, new JsonSerializerOptions { WriteIndented = true }));
 
 var now = DateTimeOffset.UtcNow;
 var start = jwtToken.IssuedAt > jwtToken.ValidFrom ? jwtToken.IssuedAt : jwtToken.ValidFrom;

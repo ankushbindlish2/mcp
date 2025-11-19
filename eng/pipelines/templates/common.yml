@@ -71,24 +71,32 @@ extends:
               while ($true) {
                 try {
                   Write-Host "Acquiring new tokens..."
-                  $env:VAULT_TOKEN = Get-AzAccessToken -ResourceUrl "https://vault.azure.net" | Select-Object -ExpandProperty Token | ConvertFrom-SecureString -AsPlainText
+                  $env:GRAPH_TOKEN = Get-AzAccessToken -ResourceUri 'https://graph.microsoft.com' -AsSecureString | Select-Object -ExpandProperty Token | ConvertFrom-SecureString -AsPlainText
 
                   Write-Host "Checking pipeline token..."
                   dotnet run --project ./src/TokenDump.csproj -- env:SYSTEM_ACCESSTOKEN
+                  Write-Host ""
 
-                  Write-Host "Checking vault token..."
-                  dotnet run --project ./src/TokenDump.csproj -- env:VAULT_TOKEN
+                  Write-Host "Checking graph token..."
+                  dotnet run --project ./src/TokenDump.csproj -- env:GRAPH_TOKEN
+                  Write-Host ""
 
-
-                  Write-Host "Testing pipeline token validity by calling Azure DevOps REST API..."
-                  $pipelineResponse = Invoke-WebRequest -Uri "$(System.CollectionUri)$(System.TeamProject)/_apis/projects?api-version=6.0" -Headers @{ "Authorization" = "Bearer $env:SYSTEM_ACCESSTOKEN" } -SkipHttpErrorCheck
+                  $uri = "$(System.CollectionUri)$(System.TeamProject)/_apis?api-version=6.0"
+                  Write-Host "Testing pipeline token validity by calling Azure DevOps REST API:"
+                  Write-Host "  $uri"
+                  $pipelineResponse = Invoke-WebRequest -Uri $uri -Headers @{ "Authorization" = "Bearer $env:SYSTEM_ACCESSTOKEN" } -SkipHttpErrorCheck -MaximumRedirection 0
                   Write-Host "Status Code: $($pipelineResponse.StatusCode)"
 
-                  Write-Host "Testing vault token validity by calling Key Vault..."
-                  $vaultResponse = Invoke-WebRequest -Uri "https://myvault.vault.azure.net/secrets/mysecret?api-version=7.3" -Headers @{ "Authorization" = "Bearer $env:VAULT_TOKEN" } -SkipHttpErrorCheck
-                  Write-Host "Status Code: $($vaultResponse.StatusCode)"
+                  Write-Host "Testing graph token validity by calling Azure AD Graph..."
+                  $graphResponse = Invoke-WebRequest -Uri "https://graph.microsoft.com/v1.0/me" -Headers @{ "Authorization" = "Bearer $env:GRAPH_TOKEN" } -SkipHttpErrorCheck
+                  Write-Host "Status Code: $($graphResponse.StatusCode)"
 
-                  if($pipelineResponse.StatusCode -ne 200 -or $vaultResponse.StatusCode -ne 200) {
+                  if($pipelineResponse.StatusCode -ne 200 -or $graphResponse.StatusCode -ne 200) {
+                    Write-Host "`nPipeline Response:"
+                    $pipelineResponse.RawContent | Out-Host
+                    Write-Host "`nGraph Response:"
+                    $graphResponse.RawContent | Out-Host
+
                     $sequentialErrors++
                     throw "One or more token tests failed."
                   }
