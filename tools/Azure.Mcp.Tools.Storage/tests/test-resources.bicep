@@ -14,7 +14,7 @@ param tenantId string = '72f988bf-86f1-41af-91ab-2d7cd011db47'
 @description('The client OID to grant access to test resources.')
 param testApplicationOid string
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
+resource storageAccount 'Microsoft.Storage/storageAccounts@2025-06-01' = {
   name: baseName
   location: location
   sku: {
@@ -31,7 +31,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
     resource fooContainer 'containers' = { name: 'foo' }
     resource barContainer 'containers' = { name: 'bar' }
     resource bazContainer 'containers' = { name: 'baz' }
-    resource testFileSystem 'containers' = { 
+    resource testFileSystem 'containers' = {
       name: 'testfilesystem'
       properties: {
         publicAccess: 'None'
@@ -40,7 +40,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
   }
 }
 
-resource blobContributorRoleDefinition 'Microsoft.Authorization/roleDefinitions@2018-01-01-preview' existing = {
+resource blobContributorRoleDefinition 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   scope: subscription()
   // This is the Storage Blob Data Contributor role.
   // Read, write, and delete Azure Storage containers and blobs

@@ -88,7 +88,7 @@ extends:
                   Write-Host "Status Code: $($pipelineResponse.StatusCode)"
 
                   Write-Host "Testing graph token validity by calling Azure AD Graph..."
-                  $storageResponse = Invoke-WebRequest -Uri "https://mcp18b2df15.blob.core.windows.net/?comp=list" -Headers @{ "Authorization" = "Bearer $env:STORAGE_TOKEN" } -SkipHttpErrorCheck
+                  $storageResponse = Invoke-WebRequest -Uri "https://mcp18b2df15.blob.core.windows.net/?comp=list" -Headers @{ "Authorization" = "Bearer $env:STORAGE_TOKEN"; "x-ms-version" = "2025-11-05" } -SkipHttpErrorCheck
                   Write-Host "Status Code: $($storageResponse.StatusCode)"
 
                   if($pipelineResponse.StatusCode -ne 200 -or $storageResponse.StatusCode -ne 200) {
