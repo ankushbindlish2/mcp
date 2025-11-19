@@ -71,14 +71,14 @@ extends:
               while ($true) {
                 try {
                   Write-Host "Acquiring new tokens..."
-                  $env:GRAPH_TOKEN = Get-AzAccessToken -ResourceUri 'https://graph.microsoft.com' -AsSecureString | Select-Object -ExpandProperty Token | ConvertFrom-SecureString -AsPlainText
+                  $env:STORAGE_TOKEN = Get-AzAccessToken -ResourceUri 'https://storage.azure.com/' -AsSecureString | Select-Object -ExpandProperty Token | ConvertFrom-SecureString -AsPlainText
 
                   Write-Host "Checking pipeline token..."
                   dotnet run --project ./src/TokenDump.csproj -- env:SYSTEM_ACCESSTOKEN
                   Write-Host ""
 
-                  Write-Host "Checking graph token..."
-                  dotnet run --project ./src/TokenDump.csproj -- env:GRAPH_TOKEN
+                  Write-Host "Checking storage token..."
+                  dotnet run --project ./src/TokenDump.csproj -- env:STORAGE_TOKEN
                   Write-Host ""
 
                   $uri = "$(System.CollectionUri)$(System.TeamProject)/_apis?api-version=6.0"
@@ -88,14 +88,14 @@ extends:
                   Write-Host "Status Code: $($pipelineResponse.StatusCode)"
 
                   Write-Host "Testing graph token validity by calling Azure AD Graph..."
-                  $graphResponse = Invoke-WebRequest -Uri "https://graph.microsoft.com/v1.0/me" -Headers @{ "Authorization" = "Bearer $env:GRAPH_TOKEN" } -SkipHttpErrorCheck
-                  Write-Host "Status Code: $($graphResponse.StatusCode)"
+                  $storageResponse = Invoke-WebRequest -Uri "https://azuresdktrainingdatatme.blob.core.windows.net/?comp=list" -Headers @{ "Authorization" = "Bearer $env:STORAGE_TOKEN" } -SkipHttpErrorCheck
+                  Write-Host "Status Code: $($storageResponse.StatusCode)"
 
-                  if($pipelineResponse.StatusCode -ne 200 -or $graphResponse.StatusCode -ne 200) {
+                  if($pipelineResponse.StatusCode -ne 200 -or $storageResponse.StatusCode -ne 200) {
                     Write-Host "`nPipeline Response:"
                     $pipelineResponse.RawContent | Out-Host
-                    Write-Host "`nGraph Response:"
-                    $graphResponse.RawContent | Out-Host
+                    Write-Host "`nStorage Response:"
+                    $storageResponse.RawContent | Out-Host
 
                     $sequentialErrors++
                     throw "One or more token tests failed."
