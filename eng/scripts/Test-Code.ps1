@@ -89,16 +89,18 @@ function CreateTestSolution {
     # Create solution and add projects
     Write-Host "Creating temporary solution file..."
 
-    Push-Location $workPath
+    $originalLocation = Get-Location
+    Set-Location $workPath
     try {
-        dotnet new sln -n "Tests" | Out-Null
+        dotnet new sln -n "Tests" | Out-Host
         dotnet sln add $testProjects --in-root | Out-Host
+
+        $fullPath = Resolve-Path "Tests.sln"
+        return $fullPath
     }
     finally {
-        Pop-Location
+        Set-Location $originalLocation
     }
-
-    return "$workPath/Tests.sln"
 }
 
 function Create-CoverageReport {
