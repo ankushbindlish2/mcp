@@ -92,7 +92,8 @@ function CreateTestSolution {
     $originalLocation = Get-Location
     Set-Location $workPath
     try {
-        dotnet new sln -n "Tests" | Out-Host
+        dotnet new sln -n "Tests" | Out-Null
+        Get-ChildItem -Path . | Out-Host
         dotnet sln add $testProjects --in-root | Out-Host
 
         $fullPath = Resolve-Path "Tests.sln"
