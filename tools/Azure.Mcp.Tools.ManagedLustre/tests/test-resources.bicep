@@ -33,8 +33,8 @@ param amlfsCapacityTiB int = 4
 @description('The resource ID of the test application user-assigned managed identity. If not provided, a new one will be created.')
 param testApplicationUamiId string = ''
 
-@description('The object ID of the HPC Cache Resource Provider service principal. If not provided, role assignments will be skipped.')
-param hpcCacheRpObjectId string = ''
+@description('The object ID of the HPC Cache Resource Provider service principal.')
+param hpcCacheRpObjectId string
 
 var kvCryptoUserRoleDefinitionId = '14b46e9e-c2b7-41b4-b07b-48a6ebf60603'
 
@@ -109,6 +109,10 @@ resource natPublicIp 'Microsoft.Network/publicIPAddresses@2024-07-01' = {
   }
 }
 
+// Define subnet resource IDs before using them in storage account
+var filesystemSubnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, 'amlfs')
+var filesystemSmallSubnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, 'amlfs-small')
+
 @minLength(3)
 @maxLength(24)
 @description('Storage account name for HSM hydration and logging containers')
@@ -141,7 +145,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
 
 // Role assignments granting the HPC Cache RP required access to the storage account for HSM (imports/exports)
 // Storage Account Contributor
-resource storageAccountContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(hpcCacheRpObjectId)) {
+resource storageAccountContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storageAccount.id, '17d1049b-9a84-46fb-8f53-869881c3d3ab', 'hpc-cache-rp-sa-contributor')
   scope: storageAccount
   properties: {
@@ -152,7 +156,7 @@ resource storageAccountContributorRole 'Microsoft.Authorization/roleAssignments@
 }
 
 // Storage Blob Data Contributor
-resource storageBlobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(hpcCacheRpObjectId)) {
+resource storageBlobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storageAccount.id, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe', 'hpc-cache-rp-blob-contributor')
   scope: storageAccount
   properties: {
@@ -183,9 +187,6 @@ resource loggingContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
     publicAccess: 'None'
   }
 }
-
-var filesystemSubnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, 'amlfs')
-var filesystemSmallSubnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, 'amlfs-small')
 
 resource amlfs 'Microsoft.StorageCache/amlFilesystems@2024-07-01' = {
   name: baseName
