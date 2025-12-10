@@ -30,14 +30,13 @@ param amlfsSku string = 'AMLFS-Durable-Premium-500'
 @minValue(4)
 param amlfsCapacityTiB int = 4
 
-@description('The client OID to grant access to test resources.')
-param testApplicationOid string = deployer().objectId
-
 @description('The resource ID of the test application user-assigned managed identity. If not provided, a new one will be created.')
 param testApplicationUamiId string = ''
 
+@description('The object ID of the HPC Cache Resource Provider service principal. If not provided, role assignments will be skipped.')
+param hpcCacheRpObjectId string = ''
+
 var kvCryptoUserRoleDefinitionId = '14b46e9e-c2b7-41b4-b07b-48a6ebf60603'
-var directoryReadAllRoleId = '88d8e3e3-8f55-4a1e-953a-9b9898b8876b' // Directory.Read.All
 
 var userAssignedName = '${baseName}-uai'
 
@@ -110,115 +109,6 @@ resource natPublicIp 'Microsoft.Network/publicIPAddresses@2024-07-01' = {
   }
 }
 
-// Get Microsoft Graph Service Principal (well-known app ID)
-resource microsoftGraphSP 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
-  name: '${baseName}-get-graph-sp'
-  location: location
-  kind: 'AzurePowerShell'
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${uamiResourceId}': {}
-    }
-  }
-  properties: {
-    azPowerShellVersion: '11.0'
-    retentionInterval: 'PT1H'
-    scriptContent: '''
-      # Microsoft Graph well-known application ID
-      $graphAppId = '00000003-0000-0000-c000-000000000000'
-      $sp = Get-AzADServicePrincipal -ApplicationId $graphAppId
-      if (-not $sp) {
-        Write-Error "Microsoft Graph service principal not found"
-        exit 1
-      }
-      $DeploymentScriptOutputs = @{}
-      $DeploymentScriptOutputs['objectId'] = $sp.Id
-    '''
-    timeout: 'PT5M'
-    cleanupPreference: 'OnSuccess'
-  }
-}
-
-// Grant Directory.Read.All permission to the managed identity via deployment script
-resource grantGraphPermission 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
-  name: '${baseName}-grant-graph-permission'
-  location: location
-  kind: 'AzurePowerShell'
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${uamiResourceId}': {}
-    }
-  }
-  properties: {
-    azPowerShellVersion: '11.0'
-    retentionInterval: 'PT1H'
-    arguments: '-ManagedIdentityPrincipalId "${empty(testApplicationUamiId) ? userAssignedIdentity.properties.principalId : reference(uamiResourceId, '2024-11-30').principalId}" -GraphSpObjectId "${microsoftGraphSP.properties.outputs.objectId}" -DirectoryReadAllRoleId "${directoryReadAllRoleId}"'
-    scriptContent: '''
-      param(
-        [string]$ManagedIdentityPrincipalId,
-        [string]$GraphSpObjectId,
-        [string]$DirectoryReadAllRoleId
-      )
-      
-      # Check if the app role assignment already exists
-      $existingAssignment = Get-AzADServicePrincipalAppRoleAssignment -ServicePrincipalId $ManagedIdentityPrincipalId -ErrorAction SilentlyContinue |
-        Where-Object { $_.AppRoleId -eq $DirectoryReadAllRoleId -and $_.ResourceId -eq $GraphSpObjectId }
-      
-      if ($existingAssignment) {
-        Write-Host "Directory.Read.All permission already granted"
-      } else {
-        Write-Host "Granting Directory.Read.All permission to managed identity"
-        New-AzADServicePrincipalAppRoleAssignment `
-          -ServicePrincipalId $ManagedIdentityPrincipalId `
-          -ResourceId $GraphSpObjectId `
-          -AppRoleId $DirectoryReadAllRoleId
-        Write-Host "Permission granted successfully"
-      }
-      
-      $DeploymentScriptOutputs = @{}
-      $DeploymentScriptOutputs['status'] = 'completed'
-    '''
-    timeout: 'PT10M'
-    cleanupPreference: 'OnSuccess'
-  }
-  dependsOn: [
-    microsoftGraphSP
-  ]
-}
-
-// Deployment script to get HPC Cache Resource Provider service principal object ID
-resource getHpcCacheSpObjectId 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
-  name: '${baseName}-get-hpccache-sp'
-  location: location
-  kind: 'AzurePowerShell'
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${uamiResourceId}': {}
-    }
-  }
-  properties: {
-    azPowerShellVersion: '11.0'
-    retentionInterval: 'PT1H'
-    scriptContent: '''
-      $sp = Get-AzADServicePrincipal -DisplayName 'HPC Cache Resource Provider'
-      if (-not $sp) {
-        Write-Error "Service principal 'HPC Cache Resource Provider' not found"
-        exit 1
-      }
-      $DeploymentScriptOutputs = @{}
-      $DeploymentScriptOutputs['objectId'] = $sp.Id
-    '''
-    timeout: 'PT5M'
-    cleanupPreference: 'OnSuccess'
-  }
-  dependsOn: [
-    grantGraphPermission
-  ]
-}
-
 @minLength(3)
 @maxLength(24)
 @description('Storage account name for HSM hydration and logging containers')
@@ -251,23 +141,23 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
 
 // Role assignments granting the HPC Cache RP required access to the storage account for HSM (imports/exports)
 // Storage Account Contributor
-resource storageAccountContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource storageAccountContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(hpcCacheRpObjectId)) {
   name: guid(storageAccount.id, '17d1049b-9a84-46fb-8f53-869881c3d3ab', 'hpc-cache-rp-sa-contributor')
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '17d1049b-9a84-46fb-8f53-869881c3d3ab')
-    principalId: getHpcCacheSpObjectId.properties.outputs.objectId
+    principalId: hpcCacheRpObjectId
     principalType: 'ServicePrincipal'
   }
 }
 
 // Storage Blob Data Contributor
-resource storageBlobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource storageBlobDataContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(hpcCacheRpObjectId)) {
   name: guid(storageAccount.id, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe', 'hpc-cache-rp-blob-contributor')
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
-    principalId: getHpcCacheSpObjectId.properties.outputs.objectId
+    principalId: hpcCacheRpObjectId
     principalType: 'ServicePrincipal'
   }
 }
